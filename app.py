@@ -158,16 +158,16 @@ def valores_gerais(df, calls_data):
         """
         <div class="flex-container">
             <div class="custom-box">
-                <strong>Total de Chamadas:</strong><br><span>4.655</span>
+                <strong>Total de Chamadas:</strong><br><span>7.448</span>
             </div>
             <div class="custom-box">
-                <strong>Duração Média por Chamada:</strong><br><span>5 minutos</span>
+                <strong>Duração Média por Chamada:</strong><br><span>3 minutos</span>
             </div>
             <div class="custom-box">
                 <strong>Taxa de Abandono:</strong><br><span>2,88%</span>
             </div>
             <div class="custom-box">
-                <strong>Notas de Atendimento:</strong><br><span>410</span>
+                <strong>Notas de Atendimento:</strong><br><span>692</span>
             </div>
         </div>
         """,
@@ -384,31 +384,6 @@ def valores_por_dia(df, calls_data):
     )
 
     # Filtro de datas
-    with st.sidebar:
-        
-
-            # Botão de Logout
-
-        min_date = calls_data['CallLocalTime'].min().date()
-        max_date = calls_data['CallLocalTime'].max().date()
-        start_date = st.sidebar.date_input("Data inicial", min_date, min_value=min_date, max_value=max_date)
-        end_date = st.sidebar.date_input("Data final", max_date, min_value=min_date, max_value=max_date)
-        if start_date > end_date:
-            st.error("A data inicial não pode ser maior que a data final.")
-            st.stop()
-
-        # Filtra os dados com base no intervalo de datas
-        filtered_data = calls_data[(calls_data['CallLocalTime'].dt.date >= start_date) &
-                                    (calls_data['CallLocalTime'].dt.date <= end_date)]
-        
-        if st.button("Logout"):
-            st.session_state.authenticated = False
-            st.session_state.current_page = "login"
-            st.stop()
-        
-
-
-    # Funções para cálculo diário
     def calcular_taxa_abandono_diaria(data):
         chamadas_por_dia = data.groupby(data['CallLocalTime'].dt.date)
         resultados = []
@@ -430,12 +405,70 @@ def valores_por_dia(df, calls_data):
             resultados.append({"Dia": dia, "Resolvidas": chamadas_resolvidas, "Não Resolvidas": chamadas_nao_resolvidas})
         return pd.DataFrame(resultados)
 
-    # Cálculos
+    def calcular_taxas_por_atendente(data):
+        resultados = []
+        for atendente in data["Nome Atendente"].unique():
+            dados_atendente = data[data["Nome Atendente"] == atendente]
+
+            total_chamadas = len(dados_atendente)
+            chamadas_abandonadas = len(dados_atendente[dados_atendente["EndReason"] < 0])
+            taxa_abandono = (chamadas_abandonadas / total_chamadas) * 100 if total_chamadas > 0 else 0
+
+            chamadas_com_nota = dados_atendente[dados_atendente["NotaAtendimento"].notnull()]
+            total_chamadas_com_nota = len(chamadas_com_nota)
+            chamadas_resolvidas = len(chamadas_com_nota[chamadas_com_nota["NotaAtendimento"] >= 4])
+            taxa_resolucao = (chamadas_resolvidas / total_chamadas_com_nota) * 100 if total_chamadas_com_nota > 0 else 0
+
+            resultados.append({
+                "Nome Atendente": atendente,
+                "Taxa de Abandono (%)": taxa_abandono,
+                "Taxa de Resolução (%)": taxa_resolucao
+            })
+        return pd.DataFrame(resultados)
+
+    # Carregar os dados diretamente da planilha base
+    @st.cache_data
+    def carregar_dados():
+        data = pd.read_excel("Cópia de Cópia de Relatorio wap 2025_12.xlsx")
+        data["CallLocalTime"] = pd.to_datetime(data["CallLocalTime"])  # Converter para datetime
+        return data
+
+    # Carregar os dados da planilha
+    calls_data = carregar_dados()
+
+    # Configuração da barra lateral com filtros
+    with st.sidebar:
+        st.header("Filtros")
+        
+        # Filtro de datas
+        min_date = calls_data['CallLocalTime'].min().date()
+        max_date = calls_data['CallLocalTime'].max().date()
+        start_date = st.date_input("Data inicial", min_date, min_value=min_date, max_value=max_date, key="start_date_key")
+        end_date = st.date_input("Data final", max_date, min_value=min_date, max_value=max_date, key="end_date_key")
+        
+        if start_date > end_date:
+            st.error("A data inicial não pode ser maior que a data final.")
+            st.stop()
+        
+        # Filtrar dados por intervalo de datas
+        filtered_data = calls_data[(calls_data['CallLocalTime'].dt.date >= start_date) & 
+                                (calls_data['CallLocalTime'].dt.date <= end_date)]
+        
+        # Filtro por atendente
+        atendentes = ["Todos"] + list(filtered_data["Nome Atendente"].dropna().unique())
+        atendente_selecionado = st.selectbox("Selecione o atendente", options=atendentes)
+
+        # Filtrar os dados por atendente selecionado
+        if atendente_selecionado != "Todos":
+            filtered_data = filtered_data[filtered_data["Nome Atendente"] == atendente_selecionado]
+
+    # Cálculos de taxas
     taxa_abandono_diaria = calcular_taxa_abandono_diaria(filtered_data)
     taxa_resolucao_diaria = calcular_taxa_resolucao_diaria(filtered_data)
+    taxas_por_atendente = calcular_taxas_por_atendente(filtered_data)
 
     # Gráficos diários
-    fig5 = px.bar(
+    fig_abandono_diaria = px.bar(
         taxa_abandono_diaria,
         x="Dia",
         y=["Abandonadas", "Concluídas"],
@@ -443,27 +476,8 @@ def valores_por_dia(df, calls_data):
         barmode="group",
         text_auto=True,
         color_discrete_sequence=["#696969", "#FFD700"]
-
     )
-    fig5.update_layout(
-        title_font=dict(color="white"),
-        paper_bgcolor="#1e1e1e", 
-        font=dict(color="white"),
-        plot_bgcolor="#1e1e1e",
-        legend=dict(font =dict(color="white"))
-    )
-
-    fig6 = px.bar(
-        taxa_resolucao_diaria,
-        x="Dia",
-        y=["Resolvidas", "Não Resolvidas"],
-        title="Taxa de Resolução por Dia",
-        barmode="group",
-        text_auto=True,
-        color_discrete_sequence=["#FFD700", "#696969"]
-
-    )
-    fig6.update_layout(
+    fig_abandono_diaria.update_layout(
         title_font=dict(color="white"),
         paper_bgcolor="#1e1e1e", 
         font=dict(color="white"),
@@ -471,14 +485,67 @@ def valores_por_dia(df, calls_data):
         legend=dict(font=dict(color="white"))
     )
 
+    fig_resolucao_diaria = px.bar(
+        taxa_resolucao_diaria,
+        x="Dia",
+        y=["Resolvidas", "Não Resolvidas"],
+        title="Taxa de Resolução por Dia",
+        barmode="group",
+        text_auto=True,
+        color_discrete_sequence=["#FFD700", "#696969"]
+    )
+    fig_resolucao_diaria.update_layout(
+        title_font=dict(color="white"),
+        paper_bgcolor="#1e1e1e",
+        font=dict(color="white"),
+        plot_bgcolor="#1e1e1e",
+        legend=dict(font=dict(color="white"))
+    )
+
+    # Gráficos por atendente
+    fig_abandono_por_atendente = px.bar(
+        taxas_por_atendente,
+        x="Nome Atendente",
+        y="Taxa de Abandono (%)",
+        title="Taxa de Abandono por Atendente",
+        text="Taxa de Abandono (%)",
+        color_discrete_sequence=['#FFD700', '696969']
+    )
+    fig_abandono_por_atendente.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+    fig_abandono_por_atendente.update_layout(
+        title_font=dict(color="white"),
+        paper_bgcolor="#1e1e1e",
+        font=dict(color="white"),
+        plot_bgcolor="#1e1e1e",
+        legend=dict(font=dict(color="white")),
+    )
+
+    fig_resolucao_por_atendente = px.bar(
+        taxas_por_atendente,
+        x="Nome Atendente",
+        y="Taxa de Resolução (%)",
+        title="Taxa de Resolução por Atendente",
+        text="Taxa de Resolução (%)",
+        color_discrete_sequence=['#FFD700', "#696969"]
+    )
+    fig_resolucao_por_atendente.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+    fig_resolucao_por_atendente.update_layout(
+        title_font=dict(color="white"),
+        paper_bgcolor="#1e1e1e",
+        font=dict(color="white"),
+        plot_bgcolor="#1e1e1e",
+        legend=dict(font=dict(color="white"))
+    )
     # Exibição dos gráficos
-    st.plotly_chart(fig5, use_container_width=True)
-    st.plotly_chart(fig6, use_container_width=True)
+    st.plotly_chart(fig_abandono_diaria, use_container_width=True)
+    st.plotly_chart(fig_resolucao_diaria, use_container_width=True)
+    st.plotly_chart(fig_abandono_por_atendente, use_container_width=True)
+    st.plotly_chart(fig_resolucao_por_atendente, use_container_width=True)
 
 # Navegação entre as páginas
 def dashboard_page():
-    df = pd.read_excel('Relatorio wap 17_12 - cópia.xlsx')
-    calls_data = pd.read_excel('Relatorio wap 17_12 - cópia.xlsx', sheet_name='Calls')
+    df = pd.read_excel('Cópia de Cópia de Relatorio wap 2025_12.xlsx')
+    calls_data = pd.read_excel('Cópia de Cópia de Relatorio wap 2025_12.xlsx', sheet_name='Calls')
     calls_data['CallLocalTime'] = pd.to_datetime(calls_data['CallLocalTime'], errors='coerce')
 
     with st.sidebar:
@@ -665,23 +732,37 @@ def dashboard_frequencia_produtos(df):
 
 def analise_acoes():
     # Load data
-    file_path = 'Relatorio wap 17_12 - cópia.xlsx'
+    file_path = 'Cópia de Cópia de Relatorio wap 2025_12.xlsx'
     data = pd.ExcelFile(file_path)
     actions_data = data.parse('Actions')
 
     # Data Preprocessing
-    actions_data['Duration_minutes'] = (actions_data['Duration'] / 60000).round(0).astype(int)
+    actions_data['Duration_minutes'] = (actions_data['Duration'] * 0.01 / 60).astype(int)
     actions_data['Descrição estados'] = actions_data['Descrição estados'].fillna('Nulo')
+    actions_data['Date'] = pd.to_datetime(actions_data['ActionLocalTime']).dt.date
 
     # Sidebar - Select Attendants
-    attendants = actions_data['nome'].unique()
+    st.sidebar.title("Filtros")
+    attendants = actions_data['Nome Agente'].unique()
     selected_attendants = st.sidebar.multiselect("Selecione os atendentes", attendants, default=attendants)
 
-    # Filter data by selected attendants
-    filtered_data = actions_data[actions_data['nome'].isin(selected_attendants)]
+    # Sidebar - Select Date Range
+    start_date = st.sidebar.date_input("Data Inicial", value=pd.to_datetime(actions_data['Date']).min())
+    end_date = st.sidebar.date_input("Data Final", value=pd.to_datetime(actions_data['Date']).max())
 
-    st.title("Gráficos por Ação")
+    if start_date > end_date:
+        st.error("A data inicial não pode ser maior que a data final.")
+        return
 
+    # Filter data by selected attendants and date range
+    filtered_data = actions_data[(actions_data['Nome Agente'].isin(selected_attendants)) &
+                                  (actions_data['Date'] >= start_date) &
+                                  (actions_data['Date'] <= end_date)]
+
+    # Remove rows with 'Nulo' in 'Descrição estados'
+    filtered_data = filtered_data[filtered_data['Descrição estados'] != 'Nulo']
+
+    st.title("Análise de Duração por Ação e Atendente")
     st.markdown(
         """
         <style>
@@ -769,75 +850,70 @@ def analise_acoes():
         """,
         unsafe_allow_html=True
     )
-    
-    filtered_data = filtered_data[filtered_data['Descrição estados'] != 'Nulo']  # Remove nulos
-    grouped_data = filtered_data.groupby(['Descrição estados', 'nome'])['Duration_minutes'].sum().reset_index()
+  
 
-    actions = grouped_data['Descrição estados'].unique()
+    # Group data for overall averages
+    overall_avg = filtered_data.groupby(['Descrição estados', 'Nome Agente'])['Duration_minutes'].mean().reset_index()
+    overall_avg = overall_avg.rename(columns={"Duration_minutes": "Tempo Médio (min)"})
 
-    for action in actions:
-        action_data = grouped_data[grouped_data['Descrição estados'] == action]
+    # Display average duration by action and attendant
+    for action in overall_avg['Descrição estados'].unique():
+        st.subheader(f"Ação: {action}")
+        action_data = overall_avg[overall_avg['Descrição estados'] == action]
+        action_data['Tempo Médio (min)'] = action_data['Tempo Médio (min)'].astype(int)  # Ensure integer values for labels
         fig = px.bar(
-            action_data, x='nome', y='Duration_minutes',
-            title=f"Tempo por Atendente - Ação: {action}",
-            labels={"nome": "Atendente", "Duration_minutes": "Tempo (min)"},
-            text='Duration_minutes', 
+            action_data, x='Nome Agente', y='Tempo Médio (min)',
+            title=f"Tempo Médio por Atendente - Ação: {action}",
+            labels={"Nome Agente": "Atendente", "Tempo Médio (min)": "Tempo Médio (min)"},
+            text='Tempo Médio (min)',
             color_discrete_sequence=['#FFD700']
         )
+        fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')  # Show only integer values
         fig.update_layout(
-            title_font=dict(color="white", size=22),
-            plot_bgcolor="#1e1e1e", 
-            paper_bgcolor="#1e1e1e", 
-            font=dict(color="white", size=22),
-            xaxis=dict(title=dict(font=dict(color="white", size=18))),
-            yaxis=dict(title=dict(font=dict(color="white", size=18)))
+            title_font=dict(size=18),
+            plot_bgcolor="#1e1e1e",
+            paper_bgcolor="#1e1e1e",
+            font=dict(size=12),
+            xaxis=dict(title=dict(font=dict(color='white', size=14))),
+            yaxis=dict(title=dict(font=dict(color='white', size=14)))
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # Informações por dia com filtro
-    st.sidebar.subheader("Filtrar por Período")
-    start_date = st.sidebar.date_input("Data Inicial", value=pd.to_datetime(filtered_data['ActionLocalTime']).min().date())
-    end_date = st.sidebar.date_input("Data Final", value=pd.to_datetime(filtered_data['ActionLocalTime']).max().date())
+    # Group data for daily averages
+    daily_avg = filtered_data.groupby(['Date', 'Descrição estados'])['Duration_minutes'].mean().reset_index()
+    daily_avg = daily_avg.rename(columns={"Duration_minutes": "Tempo Médio Diário (min)"})
 
-    if start_date > end_date:
-        st.error("A data inicial não pode ser maior que a data final.")
-        return
-    adicionar_logout()
-    st.title("Visão por Período")
+    st.title("Análise de Duração Diária por Ação")
 
-
-    filtered_data['Date'] = pd.to_datetime(filtered_data['ActionLocalTime']).dt.date
-    period_data = filtered_data[(filtered_data['Date'] >= start_date) & (filtered_data['Date'] <= end_date)]
-    daily_data = period_data.groupby(['Date', 'Descrição estados'])['Duration_minutes'].sum().reset_index()
-
-    for action in actions:
-        action_daily_data = daily_data[daily_data['Descrição estados'] == action]
+    # Display daily average duration by action
+    for action in daily_avg['Descrição estados'].unique():
+        st.subheader(f"Ação: {action}")
+        action_daily_data = daily_avg[daily_avg['Descrição estados'] == action]
+        action_daily_data['Tempo Médio Diário (min)'] = action_daily_data['Tempo Médio Diário (min)'].astype(int)  # Ensure integer values for labels
         fig_daily = px.bar(
-            action_daily_data, x='Date', y='Duration_minutes',
-            title=f"Duração Total por Dia - Ação: {action}",
-            labels={"Date": "Data", "Duration_minutes": "Duração Total (min)"},
+            action_daily_data, x='Date', y='Tempo Médio Diário (min)',
+            title=f"Tempo Médio Diário - Ação: {action}",
+            labels={"Date": "Data", "Tempo Médio Diário (min)": "Tempo Médio Diário (min)"},
+            text='Tempo Médio Diário (min)',
             color_discrete_sequence=['#FFD700']
         )
-     
+        fig_daily.update_traces(texttemplate='%{text:.0f}', textposition='outside')  # Show only integer values
         fig_daily.update_layout(
-            plot_bgcolor="#1e1e1e", 
-            paper_bgcolor="#1e1e1e", 
-            font=dict(color="black"),
-            title_font=dict(color="white", size=22),
-            xaxis=dict(title=dict(font=dict(color="white", size=18))),
-            yaxis=dict(title=dict(font=dict(color="white",size=18))),
-        )
-        
+            title_font=dict(size=18),
+            plot_bgcolor="#1e1e1e",
+            paper_bgcolor="#1e1e1e",
+            font=dict(size=12),
+            xaxis=dict(title=dict(font=dict(color='white', size=14))),
+            yaxis=dict(title=dict(font=dict(color='white', size=14))))
         st.plotly_chart(fig_daily, use_container_width=True)
-
 
 
 # Página do Dashboard
 def dashboard_page():
     # Verifique se os arquivos de dados estão disponíveis
     try:
-        df = pd.read_excel('Relatorio wap 17_12 - cópia.xlsx')
-        calls_data = pd.read_excel('Relatorio wap 17_12 - cópia.xlsx', sheet_name='Calls')
+        df = pd.read_excel('Cópia de Cópia de Relatorio wap 2025_12.xlsx')
+        calls_data = pd.read_excel('Cópia de Cópia de Relatorio wap 2025_12.xlsx', sheet_name='Calls')
         calls_data['CallLocalTime'] = pd.to_datetime(calls_data['CallLocalTime'], errors='coerce')
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {e}")

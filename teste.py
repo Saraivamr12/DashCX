@@ -737,18 +737,32 @@ def analise_acoes():
     actions_data = data.parse('Actions')
 
     # Data Preprocessing
-    actions_data['Duration_minutes'] = (actions_data['Duration'] * 0.01 / 60).round(0).astype(int)
+    actions_data['Duration_minutes'] = (actions_data['Duration'] * 0.01 / 60).astype(int)
     actions_data['Descrição estados'] = actions_data['Descrição estados'].fillna('Nulo')
+    actions_data['Date'] = pd.to_datetime(actions_data['ActionLocalTime']).dt.date
 
     # Sidebar - Select Attendants
+    st.sidebar.title("Filtros")
     attendants = actions_data['Nome Agente'].unique()
     selected_attendants = st.sidebar.multiselect("Selecione os atendentes", attendants, default=attendants)
 
-    # Filter data by selected attendants
-    filtered_data = actions_data[actions_data['Nome Agente'].isin(selected_attendants)]
+    # Sidebar - Select Date Range
+    start_date = st.sidebar.date_input("Data Inicial", value=pd.to_datetime(actions_data['Date']).min())
+    end_date = st.sidebar.date_input("Data Final", value=pd.to_datetime(actions_data['Date']).max())
 
-    st.title("Média de duração por Atendente e por ação")
+    if start_date > end_date:
+        st.error("A data inicial não pode ser maior que a data final.")
+        return
 
+    # Filter data by selected attendants and date range
+    filtered_data = actions_data[(actions_data['Nome Agente'].isin(selected_attendants)) &
+                                  (actions_data['Date'] >= start_date) &
+                                  (actions_data['Date'] <= end_date)]
+
+    # Remove rows with 'Nulo' in 'Descrição estados'
+    filtered_data = filtered_data[filtered_data['Descrição estados'] != 'Nulo']
+
+    st.title("Análise de Duração por Ação e Atendente")
     st.markdown(
         """
         <style>
@@ -836,67 +850,62 @@ def analise_acoes():
         """,
         unsafe_allow_html=True
     )
-    
-    filtered_data = filtered_data[filtered_data['Descrição estados'] != 'Nulo']  # Remove nulos
-    grouped_data = filtered_data.groupby(['Descrição estados', 'Nome Agente'])['Duration_minutes'].sum().reset_index()
+  
 
-    actions = grouped_data['Descrição estados'].unique()
+    # Group data for overall averages
+    overall_avg = filtered_data.groupby(['Descrição estados', 'Nome Agente'])['Duration_minutes'].mean().reset_index()
+    overall_avg = overall_avg.rename(columns={"Duration_minutes": "Tempo Médio (min)"})
 
-    for action in actions:
-        action_data = grouped_data[grouped_data['Descrição estados'] == action]
+    # Display average duration by action and attendant
+    for action in overall_avg['Descrição estados'].unique():
+        st.subheader(f"Ação: {action}")
+        action_data = overall_avg[overall_avg['Descrição estados'] == action]
+        action_data['Tempo Médio (min)'] = action_data['Tempo Médio (min)'].astype(int)  # Ensure integer values for labels
         fig = px.bar(
-            action_data, x='Nome Agente', y='Duration_minutes',
-            title=f"Tempo por Atendente - Ação: {action}",
-            labels={"Nome Agente": "Atendente", "Duration_minutes": "Tempo (min)"},
-            text='Duration_minutes', 
+            action_data, x='Nome Agente', y='Tempo Médio (min)',
+            title=f"Tempo Médio por Atendente - Ação: {action}",
+            labels={"Nome Agente": "Atendente", "Tempo Médio (min)": "Tempo Médio (min)"},
+            text='Tempo Médio (min)',
             color_discrete_sequence=['#FFD700']
         )
+        fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')  # Show only integer values
         fig.update_layout(
-            title_font=dict(color="white", size=22),
-            plot_bgcolor="#1e1e1e", 
-            paper_bgcolor="#1e1e1e", 
-            font=dict(color="white", size=22),
-            xaxis=dict(title=dict(font=dict(color="white", size=18))),
-            yaxis=dict(title=dict(font=dict(color="white", size=18)))
+            title_font=dict(size=18),
+            plot_bgcolor="#1e1e1e",
+            paper_bgcolor="#1e1e1e",
+            font=dict(size=12),
+            xaxis=dict(title=dict(font=dict(color='white', size=14))),
+            yaxis=dict(title=dict(font=dict(color='white', size=14)))
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # Informações por dia com filtro
-    st.sidebar.subheader("Filtrar por Período")
-    start_date = st.sidebar.date_input("Data Inicial", value=pd.to_datetime(filtered_data['ActionLocalTime']).min().date())
-    end_date = st.sidebar.date_input("Data Final", value=pd.to_datetime(filtered_data['ActionLocalTime']).max().date())
+    # Group data for daily averages
+    daily_avg = filtered_data.groupby(['Date', 'Descrição estados'])['Duration_minutes'].mean().reset_index()
+    daily_avg = daily_avg.rename(columns={"Duration_minutes": "Tempo Médio Diário (min)"})
 
-    if start_date > end_date:
-        st.error("A data inicial não pode ser maior que a data final.")
-        return
-    adicionar_logout()
-    st.title("Visão por Período")
+    st.title("Análise de Duração Diária por Ação")
 
-
-    filtered_data['Date'] = pd.to_datetime(filtered_data['ActionLocalTime']).dt.date
-    period_data = filtered_data[(filtered_data['Date'] >= start_date) & (filtered_data['Date'] <= end_date)]
-    daily_data = period_data.groupby(['Date', 'Descrição estados'])['Duration_minutes'].sum().reset_index()
-
-    for action in actions:
-        action_daily_data = daily_data[daily_data['Descrição estados'] == action]
+    # Display daily average duration by action
+    for action in daily_avg['Descrição estados'].unique():
+        st.subheader(f"Ação: {action}")
+        action_daily_data = daily_avg[daily_avg['Descrição estados'] == action]
+        action_daily_data['Tempo Médio Diário (min)'] = action_daily_data['Tempo Médio Diário (min)'].astype(int)  # Ensure integer values for labels
         fig_daily = px.bar(
-            action_daily_data, x='Date', y='Duration_minutes',
-            title=f"Duração Total por Dia - Ação: {action}",
-            labels={"Date": "Data", "Duration_minutes": "Duração Total (min)"},
+            action_daily_data, x='Date', y='Tempo Médio Diário (min)',
+            title=f"Tempo Médio Diário - Ação: {action}",
+            labels={"Date": "Data", "Tempo Médio Diário (min)": "Tempo Médio Diário (min)"},
+            text='Tempo Médio Diário (min)',
             color_discrete_sequence=['#FFD700']
         )
-     
+        fig_daily.update_traces(texttemplate='%{text:.0f}', textposition='outside')  # Show only integer values
         fig_daily.update_layout(
-            plot_bgcolor="#1e1e1e", 
-            paper_bgcolor="#1e1e1e", 
-            font=dict(color="black"),
-            title_font=dict(color="white", size=22),
-            xaxis=dict(title=dict(font=dict(color="white", size=18))),
-            yaxis=dict(title=dict(font=dict(color="white",size=18))),
-        )
-        
+            title_font=dict(size=18),
+            plot_bgcolor="#1e1e1e",
+            paper_bgcolor="#1e1e1e",
+            font=dict(size=12),
+            xaxis=dict(title=dict(font=dict(color='white', size=14))),
+            yaxis=dict(title=dict(font=dict(color='white', size=14))))
         st.plotly_chart(fig_daily, use_container_width=True)
-
 
 
 # Página do Dashboard
