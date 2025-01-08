@@ -10,13 +10,15 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
+    theme={"base": "dark"}
 )
 
 # Dados de autenticação
 USER_CREDENTIALS = {
     "CX": "Cx@wap",
     "user1": "123",
-    "user2": "12345"
+    "user2": "12345",
+    "wap2025": "wap2025"
 }
 
 # Inicializa o estado de autenticação
