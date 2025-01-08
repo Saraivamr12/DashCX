@@ -9,8 +9,8 @@ st.set_page_config(
     page_title="Dashboard KPIs",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded",
-    theme={"base": "dark"}
+    initial_sidebar_state="expanded"
+   
 )
 
 # Dados de autenticação
