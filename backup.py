@@ -163,6 +163,12 @@ def valores_gerais(df, calls_data):
         taxa_resolucao = (chamadas_resolvidas / total_chamadas_com_nota) * 100 if total_chamadas_com_nota > 0 else 0
 
         return [chamadas_resolvidas, chamadas_nao_resolvidas, taxa_resolucao]
+    
+
+    # Criar DataFrame com os dados de calls_data
+    df_atendentes = criar_df_atendentes(calls_data)
+
+    # Exibir o DataFrame no Streamlit
 
     # Volume de Atendimentos por Hora
     calls_per_hour = calcular_volume_atendimentos(calls_data)
@@ -317,7 +323,7 @@ def valores_por_dia(df, calls_data):
     # Carregar os dados diretamente da planilha base
     @st.cache_data
     def carregar_dados():
-        data = pd.read_excel("Relatório de Ligações Jan25.xlsx")
+        data = pd.read_excel("Relatório de Ligações Jan 25 - completo.xlsx")
         data["CallLocalTime"] = pd.to_datetime(data["CallLocalTime"])  # Converter para datetime
         return data
 
@@ -393,8 +399,8 @@ def valores_por_dia(df, calls_data):
 
 # Navegação entre as páginas
 def dashboard_page():
-    df = pd.read_excel('Relatório de Ligações Jan25.xlsx')
-    calls_data = pd.read_excel('Relatório de Ligações Jan25.xlsx', sheet_name='Calls')
+    df = pd.read_excel('Relatório de Ligações Jan 25 - completo.xlsx')
+    calls_data = pd.read_excel('Relatório de Ligações Jan 25 - completo.xlsx', sheet_name='Calls')
     calls_data['CallLocalTime'] = pd.to_datetime(calls_data['CallLocalTime'], errors='coerce')
 
     with st.sidebar:
@@ -662,7 +668,7 @@ def dashboard_produtos(df):
 
 def carregar_dados():
     try:
-        df = pd.read_excel("Relatório de Ligações Jan25.xlsx", sheet_name="Calls")
+        df = pd.read_excel("Relatório de Ligações Jan 25 - completo.xlsx", sheet_name="Calls")
         return df
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {e}")
@@ -671,7 +677,7 @@ def carregar_dados():
 
 def analise_acoes():
     # Load data
-    file_path = 'Relatório de Ligações Jan25.xlsx'
+    file_path = 'Relatório de Ligações Jan 25 - completo.xlsx'
     data = pd.ExcelFile(file_path)
     actions_data = data.parse('Actions')
 
@@ -749,8 +755,8 @@ def analise_acoes():
 def dashboard_page():
     # Verifique se os arquivos de dados estão disponíveis
     try:
-        df = pd.read_excel('Relatório de Ligações Jan25.xlsx')
-        calls_data = pd.read_excel('Relatório de Ligações Jan25.xlsx', sheet_name='Calls')
+        df = pd.read_excel('Relatório de Ligações Jan 25 - completo.xlsx')
+        calls_data = pd.read_excel('Relatório de Ligações Jan 25 - completo.xlsx', sheet_name='Calls')
         calls_data['CallLocalTime'] = pd.to_datetime(calls_data['CallLocalTime'], errors='coerce')
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {e}")
