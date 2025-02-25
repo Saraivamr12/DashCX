@@ -1,0 +1,14 @@
+# Ignorar arquivos de configuração sensíveis
+.env
+config.json
+
+# Ignorar pastas comuns
+__pycache__/
+*.pyc
+
+# Ignorar arquivos do Jupyter Notebook
+.ipynb_checkpoints/
+
+# Ignorar logs e arquivos temporários
+*.log
+*.sqlite3
