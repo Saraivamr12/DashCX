@@ -56,186 +56,166 @@ def adicionar_logout():
             st.session_state.current_page = "login"
             
 
-# Página com valores gerais
 def valores_gerais(df, calls_data):
-    st.title("KPIs Agrupados - Visão Geral")
-    adicionar_logout()
-            # Estilo Customizado
+        st.title("KPIs Agrupados - Visão Geral")
+        adicionar_logout()
 
+        # 🔹 Criando o filtro de data na sidebar
+        st.sidebar.header("Filtros")
 
-# CSS para personalizar a aparência
- 
-    total_chamadas = calls_data.shape[0]
-
-    # Convertendo centésimos de segundos para segundos (1 segundo = 100 centésimos de segundo)
-    duracao_media_segundos = round(calls_data["Duration"].mean() / 100, 2)  # Agora o cálculo está correto!
-
-    # Cálculo da taxa de abandono
-    chamadas_abandonadas = calls_data[calls_data["Abandon"] == 1].shape[0]
-    notas_validas = calls_data[calls_data['NotaAtendimento'].notnull()]
-
-    # Calculando a frequência de cada nota
-    frequencia_notas = notas_validas['NotaAtendimento'].value_counts().sort_index()
-
-    # Criando um DataFrame para as notas e quantidades
-    df_notas = pd.DataFrame({
-        'Nota': frequencia_notas.index,
-        'Qtde': frequencia_notas.values
-    })
-
-    # Calculando o total de cada nota (Nota * Qtde)
-    df_notas['Total'] = df_notas['Nota'] * df_notas['Qtde']
-
-    # Calculando a Nota de Satisfação (Soma dos Totais / Soma das Quantidades)
-    nota_satisfacao = df_notas['Total'].sum() / df_notas['Qtde'].sum()
-
-    # Outros KPIs
-    total_chamadas = calls_data.shape[0]
-
-    # Convertendo a duração de chamadas de centésimos de segundos para segundos
-    duracao_media_segundos = round(calls_data["Duration"].mean() / 100, 2)
-
-    # Calculando a taxa de abandono
-    chamadas_abandonadas = calls_data[calls_data["Abandon"] == 1].shape[0]
-    taxa_abandono = round((chamadas_abandonadas / total_chamadas) * 100, 2) if total_chamadas > 0 else 0
-
-    # Calculando a média das notas de atendimento
-    media_nota_atendimento = round(calls_data["NotaAtendimento"].mean(), 2)
-
-    # Exibindo os KPIs
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric(label="📞 Total de Chamadas", value=f"{total_chamadas:,}".replace(",", "."))
-    with col2:
-        st.metric(label="⏳ Tempo Médio", value=f"{duracao_media_segundos:.2f} seg")
-    with col3:
-        st.metric(label="📉 Taxa de Abandono", value=f"{taxa_abandono:.2f}%")
-    with col4:
-        st.metric(label="⭐ Nota Média", value=f"{media_nota_atendimento:.2f}")
-
-    # Funções para cálculos
-    def calcular_volume_atendimentos(data):
-        calls_per_hour = data.groupby(data['CallLocalTime'].dt.hour).size()
-        return calls_per_hour
-
-    def calcular_frequencia_notas(data):
-        notas_validas = data[data['NotaAtendimento'].notnull()]
-        frequencia_notas = notas_validas['NotaAtendimento'].value_counts().sort_index()
-        return frequencia_notas
-
-    def calcular_taxa_abandono(data):
-        total_chamadas = len(data)
+        # Definir intervalo de datas baseado na base
+        min_date = calls_data["CallLocalTime"].min().date()
+        max_date = calls_data["CallLocalTime"].max().date()
         
-        if total_chamadas == 0:  # Evita divisão por zero
-            return {"taxa_abandono": 0, "chamadas_abandonadas": 0, "chamadas_concluidas": 0}
+        # Criar input para selecionar data
+        start_date = st.sidebar.date_input("Data Inicial", min_date, min_value=min_date, max_value=max_date, key="start_date_geral")
+        end_date = st.sidebar.date_input("Data Final", max_date, min_value=min_date, max_value=max_date, key="end_date_geral")
 
-        chamadas_abandonadas = data[data["Abandon"] == 1].shape[0]
-        chamadas_concluidas = total_chamadas - chamadas_abandonadas
-        taxa_abandono = (chamadas_abandonadas / total_chamadas) * 100
+        # Validar intervalo de datas
+        if start_date > end_date:
+            st.error("A data inicial não pode ser maior que a data final.")
+            return
 
-        return {
-            "taxa_abandono": round(taxa_abandono, 2),
-            "chamadas_abandonadas": chamadas_abandonadas,
-            "chamadas_concluidas": chamadas_concluidas
-        }
-    
-    def calcular_taxa_resolucao(data):
-        """
-        Calcula a taxa de resolução considerando que um número (ANI) não repetido é resolvido.
-        """
-        # Filtra as chamadas que possuem nota de atendimento
-        chamadas_com_nota = data[data["NotaAtendimento"].notnull()]
+        # 🔹 Filtrar os dados pelo intervalo de tempo selecionado
+        filtered_calls_data = calls_data[
+            (calls_data["CallLocalTime"].dt.date >= start_date) &
+            (calls_data["CallLocalTime"].dt.date <= end_date)
+        ]
 
-        # Conta o total de chamadas com nota
-        total_chamadas_com_nota = len(chamadas_com_nota)
+        # 🔹 Cálculo de KPIs após o filtro (mantendo sua lógica original)
 
-        # Identifica os números (ANI) únicos e repetidos
-        chamadas_com_ani_unico = chamadas_com_nota.groupby("ANI").filter(lambda x: len(x) == 1)  # Número único
-        chamadas_com_ani_repetido = chamadas_com_nota.groupby("ANI").filter(lambda x: len(x) > 1)  # Número repetido
+        total_chamadas = filtered_calls_data.shape[0]
 
-        # Chamadas resolvidas: números únicos
-        chamadas_resolvidas = len(chamadas_com_ani_unico)
+        # Convertendo centésimos de segundos para segundos
+        filtered_calls_data["Duration"] = pd.to_numeric(filtered_calls_data["Duration"], errors="coerce")
 
-        # Chamadas não resolvidas: números repetidos
-        chamadas_nao_resolvidas = len(chamadas_com_ani_repetido)
+        # Calcular a média da duração em segundos e converter para minutos
+        media_duracao_segundos = filtered_calls_data["Duration"].mean()
+        media_duracao_minutos = media_duracao_segundos / 60 if media_duracao_segundos > 0 else 0
+        # Taxa de Abandono
+        
+        chamadas_abandonadas = filtered_calls_data[filtered_calls_data["Abandon"] == 1].shape[0]
+        taxa_abandono = round((chamadas_abandonadas / total_chamadas) * 100, 2) if total_chamadas > 0 else 0
 
-        # Calcula a taxa de resolução
-        taxa_resolucao = (chamadas_resolvidas / total_chamadas_com_nota) * 100 if total_chamadas_com_nota > 0 else 0
+        # Frequência de Notas
+        notas_validas = filtered_calls_data[filtered_calls_data['NotaAtendimento'].notnull()]
+        frequencia_notas = notas_validas['NotaAtendimento'].value_counts().sort_index()
 
-        return [chamadas_resolvidas, chamadas_nao_resolvidas, taxa_resolucao]
-    
+        # Criando DataFrame para calcular Nota de Satisfação
+        if not frequencia_notas.empty:
+            df_notas = pd.DataFrame({'Nota': frequencia_notas.index, 'Qtde': frequencia_notas.values})
+            df_notas['Total'] = df_notas['Nota'] * df_notas['Qtde']
+            nota_satisfacao = df_notas['Total'].sum() / df_notas['Qtde'].sum()
+        else:
+            nota_satisfacao = 0
 
-    # Criar DataFrame com os dados de calls_data
-    df_atendentes = criar_df_atendentes(calls_data)
+        # 🔹 Exibir os KPIs corrigidos
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric(label="📞 Total de Chamadas", value=f"{total_chamadas:,}".replace(",", "."))
+        with col2:
+            st.metric(label="⏳ Tempo Médio", value=f"{round(media_duracao_minutos)} Minutos")
+        with col3:
+            st.metric(label="📉 Taxa de Abandono", value=f"{taxa_abandono:.2f}%")
+        with col4:
+            st.metric(label="⭐ Nota Média", value=f"{nota_satisfacao:.2f}")
 
-    # Exibir o DataFrame no Streamlit
+        # 🔹 Funções para cálculos com base nos dados filtrados
+        def calcular_volume_atendimentos(data):
+            return data.groupby(data['CallLocalTime'].dt.hour).size()
 
-    # Volume de Atendimentos por Hora
-    calls_per_hour = calcular_volume_atendimentos(calls_data)
-    fig1 = px.line(
-        x=calls_per_hour.index,
-        y=calls_per_hour.values,
-        title="Volume de Atendimentos por Hora",
-        labels={"x": "Horário", "y": "Quantidade de Atendimentos"},
-        markers=True
-    )
-    fig1.update_traces(line=dict(color="#0979b0", width=5), marker=dict(size=8, color="gray", symbol="circle"), fill='tozeroy')
+        def calcular_frequencia_notas(data):
+            notas_validas = data[data['NotaAtendimento'].notnull()]
+            return notas_validas['NotaAtendimento'].value_counts().sort_index()
 
+        def calcular_taxa_abandono(data):
+            total_chamadas = len(data)
+            if total_chamadas == 0:
+                return {"taxa_abandono": 0, "chamadas_abandonadas": 0, "chamadas_concluidas": 0}
 
-    # Frequência de Notas
-    frequencia_notas = calcular_frequencia_notas(calls_data)
-    fig2 = px.bar(
-        x=frequencia_notas.index,
-        y=frequencia_notas.values,
-        title="Taxa de Satisfação do Cliente",
-        labels={"x": "Notas de Atendimento", "y": "Avaliações"},
-        text=frequencia_notas.values,
-        color_discrete_sequence=["#0979b0"]
-    )
-    fig2.update_traces(texttemplate="%{text}", textposition="outside")
+            chamadas_abandonadas = data[data["Abandon"] == 1].shape[0]
+            chamadas_concluidas = total_chamadas - chamadas_abandonadas
+            taxa_abandono = (chamadas_abandonadas / total_chamadas) * 100
 
+            return {
+                "taxa_abandono": round(taxa_abandono, 2),
+                "chamadas_abandonadas": chamadas_abandonadas,
+                "chamadas_concluidas": chamadas_concluidas
+            }
 
-    dados_abandono = calcular_taxa_abandono(calls_data)
-    dados_resolucao = calcular_taxa_resolucao(calls_data)
+        def calcular_taxa_resolucao(data):
+            chamadas_com_nota = data[data["NotaAtendimento"].notnull()]
+            total_chamadas_com_nota = len(chamadas_com_nota)
 
-    # Extraindo os valores para os gráficos
-    labels_abandono = ["Abandonadas", "Concluídas"]
-    values_abandono = [dados_abandono["chamadas_abandonadas"], dados_abandono["chamadas_concluidas"]]
+            chamadas_com_ani_unico = chamadas_com_nota.groupby("ANI").filter(lambda x: len(x) == 1)
+            chamadas_com_ani_repetido = chamadas_com_nota.groupby("ANI").filter(lambda x: len(x) > 1)
 
-    labels_resolucao = ["Resolvidas", "Não Resolvidas"]
-    values_resolucao = dados_resolucao  # Essa função já retorna uma lista, então está correto
+            chamadas_resolvidas = len(chamadas_com_ani_unico)
+            chamadas_nao_resolvidas = len(chamadas_com_ani_repetido)
 
-    # Gráfico de Taxa de Abandono
-    fig3 = go.Figure(
-        data=[go.Pie(
-            labels=labels_abandono,
-            values=values_abandono,
-            hole=0.4,
-            textinfo="percent+label",
-            marker=dict(colors=["#6b6b6b", "#0979b0"], line=dict(color="white", width=1))
-        )]
-    )
+            taxa_resolucao = (chamadas_resolvidas / total_chamadas_com_nota) * 100 if total_chamadas_com_nota > 0 else 0
 
-    # Gráfico de Taxa de Resolução
-    fig4 = go.Figure(
-        data=[go.Pie(
-            labels=labels_resolucao,
-            values=values_resolucao,
-            hole=0.4,
-            textinfo="percent+label",
-            marker=dict(colors=["#0979b0", "#6b6b6b"], line=dict(color="white", width=1))
-        )]
-    )
+            return [chamadas_resolvidas, chamadas_nao_resolvidas, taxa_resolucao]
 
+        # 🔹 Gerar gráficos com a base filtrada
+        calls_per_hour = calcular_volume_atendimentos(filtered_calls_data)
+        fig1 = px.line(
+            x=calls_per_hour.index,
+            y=calls_per_hour.values,
+            title="Volume de Atendimentos por Hora",
+            labels={"x": "Horário", "y": "Quantidade de Atendimentos"},
+            markers=True
+        )
+        fig1.update_traces(line=dict(color="#0979b0", width=5), marker=dict(size=8, color="gray", symbol="circle"), fill='tozeroy')
 
-    # Exibição dos gráficos
-    st.plotly_chart(fig1, use_container_width=True)
-    st.plotly_chart(fig2, use_container_width=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        st.plotly_chart(fig3, use_container_width=True)
-    with col2:
-        st.plotly_chart(fig4, use_container_width=True)
+        frequencia_notas = calcular_frequencia_notas(filtered_calls_data)
+        fig2 = px.bar(
+            x=frequencia_notas.index,
+            y=frequencia_notas.values,
+            title="Taxa de Satisfação do Cliente",
+            labels={"x": "Notas de Atendimento", "y": "Avaliações"},
+            text=frequencia_notas.values,
+            color_discrete_sequence=["#0979b0"]
+        )
+        fig2.update_traces(texttemplate="%{text}", textposition="outside")
+
+        dados_abandono = calcular_taxa_abandono(filtered_calls_data)
+        dados_resolucao = calcular_taxa_resolucao(filtered_calls_data)
+
+        labels_abandono = ["Abandonadas", "Concluídas"]
+        values_abandono = [dados_abandono["chamadas_abandonadas"], dados_abandono["chamadas_concluidas"]]
+
+        labels_resolucao = ["Resolvidas", "Não Resolvidas"]
+        values_resolucao = dados_resolucao
+
+        fig3 = go.Figure(
+            data=[go.Pie(
+                labels=labels_abandono,
+                values=values_abandono,
+                hole=0.4,
+                textinfo="percent+label",
+                marker=dict(colors=["#6b6b6b", "#0979b0"], line=dict(color="white", width=1))
+            )]
+        )
+
+        fig4 = go.Figure(
+            data=[go.Pie(
+                labels=labels_resolucao,
+                values=values_resolucao,
+                hole=0.4,
+                textinfo="percent+label",
+                marker=dict(colors=["#0979b0", "#6b6b6b"], line=dict(color="white", width=1))
+            )]
+        )
+
+        # 🔹 Exibição dos gráficos
+        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(fig3, use_container_width=True)
+        with col2:
+            st.plotly_chart(fig4, use_container_width=True)
 
 # Página com valores por dia
 def valores_por_dia(df, calls_data):
@@ -267,6 +247,16 @@ def valores_por_dia(df, calls_data):
 
 
     def calcular_taxas_por_atendente(data):
+        # Lista de atendentes que queremos incluir na análise
+        atendentes_desejados = [
+            "Caroline Rufino", "Adriana Silva", "Adriele Alfredo", "Ana Carolina Cardoso", 
+            "Andreza Lima", "Carolina Campos", "Ricardo Lima", "Sara Silva", 
+            "Melissa Carneiro", "Rosemeyre Moraes", "Tainara Miranda"
+        ]
+
+        # Filtrando os atendentes desejados na base de dados
+        data = data[data["Nome Atendente"].isin(atendentes_desejados)]
+
         resultados = []
         for atendente in data["Nome Atendente"].dropna().unique():
             dados_atendente = data[data["Nome Atendente"] == atendente]
@@ -625,7 +615,9 @@ def gerar_mapa_bolhas(df):
         projection="natural earth",
         template="plotly_dark",
         color="Quantidade",
-        color_continuous_scale="Blues"
+        color_continuous_scale="Blues",
+        hover_data={"Latitude": False, "Longitude": False}  # Oculta Latitude e Longitude
+
     )
 
 
