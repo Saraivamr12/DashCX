@@ -1,10 +1,19 @@
 from databricks import sql
 import pandas as pd
+import os
+from dotenv import load_dotenv
 
-# 🔹 Dados de conexão (substitua pelo token correto)
-HOST = "dbc-6a9b798d-9256.cloud.databricks.com"
-HTTP_PATH = "/sql/1.0/warehouses/31ee6c7460cbead5"
-ACCESS_TOKEN = "dapi35df33ea3adaf82c8565b62005f6fcea"
+# 🔹 Carregar variáveis de ambiente do arquivo .env
+load_dotenv()
+
+# 🔹 Dados de conexão (obtidos das variáveis de ambiente)
+HOST = os.getenv("DATABRICKS_HOST")
+HTTP_PATH = os.getenv("DATABRICKS_HTTP_PATH")
+ACCESS_TOKEN = os.getenv("DATABRICKS_ACCESS_TOKEN")
+
+# Verificação para garantir que os dados foram carregados corretamente
+if not all([HOST, HTTP_PATH, ACCESS_TOKEN]):
+    raise ValueError("❌ Erro: Variáveis de ambiente ausentes. Verifique o arquivo .env.")
 
 # Criar a conexão
 try:
@@ -13,14 +22,14 @@ try:
         http_path=HTTP_PATH,
         access_token=ACCESS_TOKEN
     )
-    
+
     print("✅ Conexão bem-sucedida!")
 
     # Criar cursor
     cursor = conn.cursor()
 
     # Executar uma query simples (ajuste conforme necessário)
-    cursor.execute("select *  from headless_bi.client_q700zorent.dim_user")
+    cursor.execute("SELECT * FROM headless_bi.client_q700zorent.dim_user")
     dados = cursor.fetchall()
 
     # Transformar em DataFrame
