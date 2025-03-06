@@ -359,7 +359,7 @@ def valores_por_dia(df, calls_data):
         title="Taxa de Abandono por Dia",
         barmode="group",
         text_auto=True,
-        color_discrete_sequence=["#696969", "#FFD700"]
+        color_discrete_sequence=["#6b6b6b", "#0979b0"]
     )
 
     fig_resolucao_diaria = px.bar(
@@ -369,7 +369,7 @@ def valores_por_dia(df, calls_data):
         title="Taxa de Resolução por Dia",
         barmode="group",
         text_auto=True,
-        color_discrete_sequence=["#FFD700", "#696969"]
+        color_discrete_sequence=["#0979b0", "#6b6b6b"]
     )
 
     fig_resolucao_por_atendente = px.bar(
@@ -378,7 +378,7 @@ def valores_por_dia(df, calls_data):
         y="Taxa de Resolução (%)",
         title="Taxa de Resolução por Atendente",
         text="Taxa de Resolução (%)",
-        color_discrete_sequence=['#FFD700', "#696969"]
+        color_discrete_sequence=["#0979b0"]
     )
     fig_resolucao_por_atendente.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
 
@@ -394,7 +394,7 @@ def dashboard_page():
     calls_data['CallLocalTime'] = pd.to_datetime(calls_data['CallLocalTime'], errors='coerce')
 
     with st.sidebar:
-        opcao = st.radio("Navegação", ["Valores Gerais", "Valores por Dia"])
+        opcao = st.radio("Navegação", ["Valores Gerais - Telefônia", "Valores por Dia - Telefonia"])
 
     if opcao == "Valores Gerais":
         valores_gerais(df, calls_data)
@@ -668,80 +668,111 @@ def carregar_dados():
 
 
 def analise_acoes():
-    # Load data
+    # 🔹 Carregar os dados do arquivo Excel
     file_path = 'Relatório de Ligações Jan 25 - completo.xlsx'
     data = pd.ExcelFile(file_path)
     actions_data = data.parse('Actions')
 
-    # Data Preprocessing
-    actions_data['Duration_minutes'] = (actions_data['Duration'] * 0.01 / 60).astype(int)
+    # 🔹 Lista de atendentes desejados
+    atendentes_desejados = [
+        "Caroline Rufino", "Adriana Silva", "Adriele Alfredo", "Ana Carolina Cardoso", 
+        "Andreza Lima", "Carolina Campos", "Ricardo Lima", "Sara Silva", 
+        "Melissa Carneiro", "Rosemeyre Moraes", "Tainara Miranda"
+    ]
+
+    # 🔹 Filtrar apenas os atendentes desejados
+    actions_data = actions_data[actions_data['Nome Agente'].isin(atendentes_desejados)]
+
+    # 🔹 Processamento dos dados
+    actions_data['Duration_minutes'] = (actions_data['Duration'] / 60).astype(int)  # Converter segundos para minutos
     actions_data['Descrição estados'] = actions_data['Descrição estados'].fillna('Nulo')
-    actions_data['Date'] = pd.to_datetime(actions_data['ActionLocalTime']).dt.date
+    actions_data['Date'] = pd.to_datetime(actions_data['ActionLocalTime'], errors='coerce').dt.date  # Converter para data
+    actions_data = actions_data.dropna(subset=['Date'])  # Remover valores `NaT`
 
-    # Sidebar - Select Attendants
+    # 🔹 Sidebar - Filtros
     st.sidebar.title("Filtros")
-    attendants = actions_data['Nome Agente'].unique()
-    selected_attendants = st.sidebar.multiselect("Selecione os atendentes", attendants, default=attendants)
+    selected_attendants = st.sidebar.multiselect("Selecione os atendentes", atendentes_desejados, default=atendentes_desejados)
 
-    # Sidebar - Select Date Range
-    start_date = st.sidebar.date_input("Data Inicial", value=pd.to_datetime(actions_data['Date']).min())
-    end_date = st.sidebar.date_input("Data Final", value=pd.to_datetime(actions_data['Date']).max())
+    start_date = st.sidebar.date_input(
+        "Data Inicial", value=pd.to_datetime(actions_data['Date']).dropna().min()
+    )
+    end_date = st.sidebar.date_input(
+        "Data Final", value=pd.to_datetime(actions_data['Date']).dropna().max()
+    )
 
     if start_date > end_date:
         st.error("A data inicial não pode ser maior que a data final.")
         return
 
-    # Filter data by selected attendants and date range
-    filtered_data = actions_data[(actions_data['Nome Agente'].isin(selected_attendants)) &
-                                  (actions_data['Date'] >= start_date) &
-                                  (actions_data['Date'] <= end_date)]
+    # 🔹 Aplicar filtros nos dados
+    filtered_data = actions_data[
+        (actions_data['Nome Agente'].isin(selected_attendants)) &
+        (actions_data['Date'] >= start_date) &
+        (actions_data['Date'] <= end_date)
+    ]
 
-    # Remove rows with 'Nulo' in 'Descrição estados'
-    filtered_data = filtered_data[filtered_data['Descrição estados'] != 'Nulo']
+    # 🔹 Calcular a média de duração por atendente
+    avg_duration_per_attendant = filtered_data.groupby("Nome Agente")["Duration_minutes"].mean().reset_index()
+    avg_duration_per_attendant = avg_duration_per_attendant.rename(columns={"Duration_minutes": "Tempo Médio (min)"})
 
+    # 🔹 Exibir o gráfico de média de duração por atendente
+    st.title("Média de Duração por Atendente")
+
+    fig = px.bar(
+        avg_duration_per_attendant,
+        x="Nome Agente",
+        y="Tempo Médio (min)",
+        title="Tempo Médio de Atendimento por Atendente",
+        labels={"Nome Agente": "Atendente", "Tempo Médio (min)": "Média de Tempo (min)"},
+        text="Tempo Médio (min)",
+        color_discrete_sequence=["#0979b0"]
+    )
+
+    fig.update_traces(texttemplate="%{text:.2f} min", textposition="outside")
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # 🔹 Cálculo da média de duração por ação e atendente
     st.title("Análise de Duração por Ação e Atendente")
- 
-  
-
-    # Group data for overall averages
     overall_avg = filtered_data.groupby(['Descrição estados', 'Nome Agente'])['Duration_minutes'].mean().reset_index()
     overall_avg = overall_avg.rename(columns={"Duration_minutes": "Tempo Médio (min)"})
 
-    # Display average duration by action and attendant
     for action in overall_avg['Descrição estados'].unique():
         st.subheader(f"Ação: {action}")
         action_data = overall_avg[overall_avg['Descrição estados'] == action]
-        action_data['Tempo Médio (min)'] = action_data['Tempo Médio (min)'].astype(int)  # Ensure integer values for labels
+        action_data['Tempo Médio (min)'] = action_data['Tempo Médio (min)'].astype(int)
+
         fig = px.bar(
             action_data, x='Nome Agente', y='Tempo Médio (min)',
             title=f"Tempo Médio por Atendente - Ação: {action}",
             labels={"Nome Agente": "Atendente", "Tempo Médio (min)": "Tempo Médio (min)"},
             text='Tempo Médio (min)',
-            color_discrete_sequence=['#7cdaf9']
+            color_discrete_sequence=["#0979b0"]
         )
-        fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')  # Show only integer values
+        fig.update_traces(texttemplate='%{text:.0f}', textposition='outside')
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # Group data for daily averages
+    # 🔹 Cálculo da média diária por ação
+    st.title("Análise de Duração Diária por Ação")
     daily_avg = filtered_data.groupby(['Date', 'Descrição estados'])['Duration_minutes'].mean().reset_index()
     daily_avg = daily_avg.rename(columns={"Duration_minutes": "Tempo Médio Diário (min)"})
 
-    st.title("Análise de Duração Diária por Ação")
-
-    # Display daily average duration by action
     for action in daily_avg['Descrição estados'].unique():
         st.subheader(f"Ação: {action}")
         action_daily_data = daily_avg[daily_avg['Descrição estados'] == action]
-        action_daily_data['Tempo Médio Diário (min)'] = action_daily_data['Tempo Médio Diário (min)'].astype(int)  # Ensure integer values for labels
+        action_daily_data['Tempo Médio Diário (min)'] = action_daily_data['Tempo Médio Diário (min)'].astype(int)
+
         fig_daily = px.bar(
             action_daily_data, x='Date', y='Tempo Médio Diário (min)',
             title=f"Tempo Médio Diário - Ação: {action}",
             labels={"Date": "Data", "Tempo Médio Diário (min)": "Tempo Médio Diário (min)"},
             text='Tempo Médio Diário (min)',
-            color_discrete_sequence=['#FFD700']
+            color_discrete_sequence=["#0979b0"]
         )
-        fig_daily.update_traces(texttemplate='%{text:.0f}', textposition='outside')  # Show only integer values
+        fig_daily.update_traces(texttemplate='%{text:.0f}', textposition='outside')
+
+        st.plotly_chart(fig_daily, use_container_width=True)
 
 # Página do Dashboard
 def dashboard_page():
@@ -756,16 +787,16 @@ def dashboard_page():
 
     # Adiciona a navegação na barra lateral
     with st.sidebar:
-        opcao = st.radio("Navegação", ["Valores Gerais", "Valores por Dia", "Frequência de Produtos", "Análise de Ações"])
+        opcao = st.radio("Navegação", ["Valores Gerais - Telefônia", "Valores por Dia - Telefônia", "Frequência de Produtos", "Ações de Atendentes - Telefônia"])
 
     # Navega entre as páginas
-    if opcao == "Valores Gerais":
+    if opcao == "Valores Gerais - Telefônia":
         valores_gerais(df, calls_data)
-    elif opcao == "Valores por Dia":
+    elif opcao == "Valores por Dia - Telefônia":
         valores_por_dia(df, calls_data)
     elif opcao == "Frequência de Produtos":
         dashboard_produtos(calls_data)
-    elif opcao == "Análise de Ações":
+    elif opcao == "Ações de Atendentes - Telefônia":
         analise_acoes()
 
 # Navegação
