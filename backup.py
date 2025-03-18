@@ -17,7 +17,7 @@ st.set_page_config(
 USER_CREDENTIALS = {
     "CX": "Cx@wap",
     "user1": "123",
-    "user2": "12345",
+    "user2": "1234",
     "wap2025": "wap2025"
 }
 
