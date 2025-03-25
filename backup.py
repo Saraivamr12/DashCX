@@ -683,11 +683,19 @@ def analise_acoes():
     # 🔹 Filtrar apenas os atendentes desejados
     actions_data = actions_data[actions_data['Nome Agente'].isin(atendentes_desejados)]
 
-    # 🔹 Processamento dos dados
-    actions_data['Duration_minutes'] = (actions_data['Duration'] / 60).astype(int)  # Converter segundos para minutos
+    # 🔹 Converter duração de centésimos de segundos para minutos
+    actions_data['Duration_minutes'] = (actions_data['Duration'] / 6000).round(2)
+
+    # 🔹 Preenchendo valores nulos na coluna 'Descrição estados'
     actions_data['Descrição estados'] = actions_data['Descrição estados'].fillna('Nulo')
-    actions_data['Date'] = pd.to_datetime(actions_data['ActionLocalTime'], errors='coerce').dt.date  # Converter para data
-    actions_data = actions_data.dropna(subset=['Date'])  # Remover valores `NaT`
+
+    # 🔹 Remover ações de Login e Logout
+    acoes_para_excluir = ['Login', 'Logout', 'Pausa de Login', 'Pausa de Logout']
+    actions_data = actions_data[~actions_data['Descrição estados'].isin(acoes_para_excluir)]
+
+    # 🔹 Converter 'ActionLocalTime' para data
+    actions_data['Date'] = pd.to_datetime(actions_data['ActionLocalTime'], errors='coerce').dt.date  
+    actions_data = actions_data.dropna(subset=['Date'])  # Remover valores NaT
 
     # 🔹 Sidebar - Filtros
     st.sidebar.title("Filtros")
@@ -706,8 +714,8 @@ def analise_acoes():
 
     # 🔹 Aplicar filtros nos dados
     filtered_data = actions_data[
-        (actions_data['Nome Agente'].isin(selected_attendants)) &
-        (actions_data['Date'] >= start_date) &
+        (actions_data['Nome Agente'].isin(selected_attendants)) & 
+        (actions_data['Date'] >= start_date) & 
         (actions_data['Date'] <= end_date)
     ]
 
